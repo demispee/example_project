@@ -65,6 +65,8 @@
     .cell.selected { background: rgba(127, 184, 255, 0.35); }
     .cell.wrong { color: #ff6b6b; }
     .cell.hinted { color: #ffd166; }
+    .cell.pattern { background: rgba(155, 125, 255, 0.3); }
+    .cell.target { box-shadow: inset 0 0 0 2px #ffd166; }
     .cell.flash { animation: flash 0.8s ease-out; }
     @keyframes flash {
       from { background: rgba(255, 209, 102, 0.6); }
@@ -81,6 +83,10 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+    .notes .gone {
+      color: #ff6b6b;
+      text-decoration: line-through;
     }
     #overlay {
       position: absolute;
@@ -116,7 +122,9 @@
     #pad button { padding: 10px 0; font-size: 20px; }
     #pad button.done { opacity: 0.3; }
     #message {
+      max-width: min(92vw, 480px);
       min-height: 20px;
+      line-height: 1.5;
       color: #ffd166;
       font-size: 14px;
       text-align: center;
@@ -139,11 +147,19 @@
   <main>
     <h1>Sudoku</h1>
     <div class="bar">
-      <select id="difficulty">
-        <option value="makkelijk">Makkelijk</option>
-        <option value="gemiddeld" selected>Gemiddeld</option>
-        <option value="moeilijk">Moeilijk</option>
+      <select id="difficulty" title="Moeilijkheidsgraad">
+        <option value="1">1 · Heel makkelijk</option>
+        <option value="2">2 · Makkelijk</option>
+        <option value="3">3 · Gemiddeld</option>
+        <option value="4">4 · Pittig (pointing pairs)</option>
+        <option value="5">5 · Lastig (paren)</option>
+        <option value="6">6 · Moeilijk (X-Wing, triples)</option>
+        <option value="7">7 · Expert</option>
+        <option value="8">8 · Meester</option>
+        <option value="9">9 · Extreem</option>
+        <option value="10">10 · Duivels</option>
       </select>
+      <span class="stat">Niveau: <span id="level">–</span></span>
       <span class="stat">⏱ <span id="time">0:00</span></span>
       <span class="stat">Tips: <span id="hints">0</span></span>
       <span class="stat">Opgelost: <span id="solved">0</span></span>
@@ -159,6 +175,8 @@
       <button id="notesBtn">✏️ Notities</button>
       <button id="eraseBtn">⌫ Wissen</button>
       <button id="hintBtn">💡 Tip</button>
+      <button id="stepBtn">👣 Stap</button>
+      <button id="solveBtn">▶ Los op</button>
       <button id="skipBtn">⏭ Overslaan</button>
     </div>
 
@@ -167,13 +185,14 @@
     <div class="help">
       <kbd>1</kbd>–<kbd>9</kbd> invullen &nbsp; <kbd>⌫</kbd> wissen &nbsp;
       <kbd>←↑→↓</kbd> verplaatsen<br>
-      <kbd>N</kbd> notities aan/uit &nbsp; <kbd>T</kbd> tip
+      <kbd>N</kbd> notities aan/uit &nbsp; <kbd>T</kbd> tip &nbsp; <kbd>S</kbd> stap
     </div>
   </main>
 
   <script>
-    const GIVENS = { makkelijk: 40, gemiddeld: 32, moeilijk: 26 };
     const NEXT_PUZZLE_DELAY = 3000;
+    const MAX_RATED_GIVENS = 42;
+    const GENERATE_BUDGET = 8000; // ms; after this, take the closest puzzle found
 
     const boardEl = document.getElementById("board");
     const overlayEl = document.getElementById("overlay");
@@ -181,6 +200,7 @@
     const messageEl = document.getElementById("message");
     const difficultyEl = document.getElementById("difficulty");
     const notesBtn = document.getElementById("notesBtn");
+    const solveBtn = document.getElementById("solveBtn");
 
     let puzzle, solution, values, notes, hinted;
     let selected = null;
@@ -251,27 +271,373 @@
       return count;
     }
 
-    function generate(givens) {
+    // One attempt: remove numbers one by one (keeping exactly one solution) and
+    // rate the puzzle along the way. Returns the version closest to `level`.
+    function attempt(level) {
       const full = new Array(81).fill(0);
       solve(full, 1, true);
 
-      // Remove numbers one by one, as long as the puzzle keeps exactly one solution
       const grid = full.slice();
       let filled = 81;
+      let best = null;
       for (const i of shuffle([...Array(81).keys()])) {
-        if (filled <= givens) break;
         const kept = grid[i];
         grid[i] = 0;
-        if (solve(grid.slice(), 2, false) === 1) filled--;
-        else grid[i] = kept;
+        if (solve(grid.slice(), 2, false) !== 1) {
+          grid[i] = kept;
+          continue;
+        }
+        filled--;
+        if (filled > MAX_RATED_GIVENS) continue;
+
+        const found = levelOf(rate(grid), filled);
+        if (!best || Math.abs(found - level) < Math.abs(best.level - level)) {
+          best = { puzzle: grid.slice(), solution: full, level: found };
+        }
+        // Removing more numbers (almost) never makes it easier, so stop here
+        if (found >= level) break;
       }
-      return { puzzle: grid, solution: full };
+      return best;
+    }
+
+    // ---------- Difficulty ----------
+    // Solves the puzzle the way a person would, with candidate bitmasks
+    // (bit n set = n is still possible). The hardest technique needed
+    // decides how difficult the puzzle is.
+
+    const ROWS = [...Array(9)].map((_, r) => [...Array(9)].map((_, k) => r * 9 + k));
+    const COLS = [...Array(9)].map((_, c) => [...Array(9)].map((_, k) => k * 9 + c));
+    const BOXES = [...Array(9)].map((_, b) => [...Array(9)].map((_, k) =>
+      (Math.floor(b / 3) * 3 + Math.floor(k / 3)) * 9 + (b % 3) * 3 + k % 3));
+    const UNITS = [...ROWS, ...COLS, ...BOXES];
+    const PEERS = [...Array(81)].map((_, i) => [...Array(81).keys()].filter(j => isPeer(i, j)));
+
+    // Tier 8 means: these techniques are not enough, you need chains or guessing
+    const STUCK = 8;
+    const TECHNIQUES = [
+      { tier: 1, apply: nakedSingle },
+      { tier: 2, apply: hiddenSingle },
+      { tier: 3, apply: lockedCandidates },
+      { tier: 4, apply: s => nakedSubset(s, 2) },
+      { tier: 4, apply: s => hiddenSubset(s, 2) },
+      { tier: 5, apply: s => nakedSubset(s, 3) },
+      { tier: 5, apply: s => hiddenSubset(s, 3) },
+      { tier: 6, apply: s => fish(s, 2) },  // X-Wing
+      { tier: 7, apply: xyWing },
+      { tier: 7, apply: s => fish(s, 3) },  // Swordfish
+    ];
+
+    function bitCount(mask) {
+      let count = 0;
+      for (; mask; mask &= mask - 1) count++;
+      return count;
+    }
+
+    function digitsOf(mask) {
+      const digits = [];
+      for (let n = 1; n <= 9; n++) {
+        if (mask & (1 << n)) digits.push(n);
+      }
+      return digits;
+    }
+
+    function combinations(items, k, start = 0, combo = [], out = []) {
+      if (combo.length === k) {
+        out.push(combo.slice());
+        return out;
+      }
+      for (let i = start; i < items.length; i++) {
+        combo.push(items[i]);
+        combinations(items, k, i + 1, combo, out);
+        combo.pop();
+      }
+      return out;
+    }
+
+    function place(s, i, n) {
+      s.grid[i] = n;
+      s.cand[i] = 0;
+      for (const p of PEERS[i]) s.cand[p] &= ~(1 << n);
+    }
+
+    function eliminate(s, cells, mask) {
+      let changed = false;
+      for (const i of cells) {
+        if (s.cand[i] & mask) {
+          s.cand[i] &= ~mask;
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
+    // Each technique changes the state and returns what it did
+    // ({ name, text, pattern: cells involved }), or null if it doesn't apply.
+
+    function unitName(unit) {
+      const k = UNITS.indexOf(unit);
+      return k < 9 ? `rij ${k + 1}` : k < 18 ? `kolom ${k - 8}` : `blok ${k - 17}`;
+    }
+
+    function listText(items) {
+      return items.length === 1 ? `${items[0]}` : `${items.slice(0, -1).join(", ")} en ${items[items.length - 1]}`;
+    }
+
+    // A cell with only one possible number
+    function nakedSingle(s) {
+      for (let i = 0; i < 81; i++) {
+        if (bitCount(s.cand[i]) === 1) {
+          const n = digitsOf(s.cand[i])[0];
+          place(s, i, n);
+          return { name: "Naked single", text: `in dit vakje past alleen nog een ${n}.`, pattern: [i] };
+        }
+      }
+      return null;
+    }
+
+    // A number that fits in only one cell of a row, column or box
+    function hiddenSingle(s) {
+      for (const unit of UNITS) {
+        for (let n = 1; n <= 9; n++) {
+          const spots = unit.filter(i => s.cand[i] & (1 << n));
+          if (spots.length === 1) {
+            place(s, spots[0], n);
+            return { name: "Hidden single", text: `in ${unitName(unit)} kan de ${n} alleen nog hier.`, pattern: unit };
+          }
+        }
+      }
+      return null;
+    }
+
+    // Pointing pairs and box-line reduction: a number confined to the
+    // overlap of a box and a line can be removed from the rest of both
+    function lockedCandidates(s) {
+      for (let n = 1; n <= 9; n++) {
+        const bit = 1 << n;
+        for (const unit of UNITS) {
+          const spots = unit.filter(i => s.cand[i] & bit);
+          if (spots.length < 2) continue;
+          for (const other of UNITS) {
+            if (other === unit || !spots.every(i => other.includes(i))) continue;
+            if (eliminate(s, other.filter(i => !unit.includes(i)), bit)) {
+              return {
+                name: UNITS.indexOf(unit) >= 18 ? "Pointing pair" : "Box-line reduction",
+                text: `in ${unitName(unit)} kan de ${n} alleen in deze vakjes, en die liggen allemaal in ` +
+                  `${unitName(other)}. Daarom kan de ${n} uit de rest van ${unitName(other)} weg.`,
+                pattern: spots,
+              };
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    // k cells in a unit that together hold only k numbers
+    function nakedSubset(s, k) {
+      for (const unit of UNITS) {
+        const open = unit.filter(i => s.cand[i] && bitCount(s.cand[i]) <= k);
+        for (const combo of combinations(open, k)) {
+          const mask = combo.reduce((m, i) => m | s.cand[i], 0);
+          if (bitCount(mask) !== k) continue;
+          if (eliminate(s, unit.filter(i => !combo.includes(i)), mask)) {
+            const digits = listText(digitsOf(mask));
+            return {
+              name: k === 2 ? "Naked pair" : "Naked triple",
+              text: `deze ${k} vakjes in ${unitName(unit)} kunnen samen alleen ${digits} bevatten. ` +
+                `Daarom kunnen ${digits} uit de rest van ${unitName(unit)} weg.`,
+              pattern: combo,
+            };
+          }
+        }
+      }
+      return null;
+    }
+
+    // k numbers in a unit that only fit in the same k cells
+    function hiddenSubset(s, k) {
+      for (const unit of UNITS) {
+        const digits = [];
+        const spots = {};
+        for (let n = 1; n <= 9; n++) {
+          spots[n] = unit.filter(i => s.cand[i] & (1 << n));
+          if (spots[n].length >= 2 && spots[n].length <= k) digits.push(n);
+        }
+        for (const combo of combinations(digits, k)) {
+          const cells = new Set(combo.flatMap(n => spots[n]));
+          if (cells.size !== k) continue;
+          const keep = combo.reduce((m, n) => m | (1 << n), 0);
+          if (eliminate(s, cells, ~keep)) {
+            return {
+              name: k === 2 ? "Hidden pair" : "Hidden triple",
+              text: `in ${unitName(unit)} kunnen ${listText(combo)} alleen in deze ${k} vakjes. ` +
+                `Alle andere getallen in die vakjes kunnen weg.`,
+              pattern: [...cells],
+            };
+          }
+        }
+      }
+      return null;
+    }
+
+    // X-Wing (size 2) and Swordfish (size 3)
+    function fish(s, size) {
+      const orientations = [
+        [ROWS, COLS, col, row, "rijen", "kolommen"],
+        [COLS, ROWS, row, col, "kolommen", "rijen"],
+      ];
+      for (let n = 1; n <= 9; n++) {
+        const bit = 1 << n;
+        for (const [bases, covers, coverOf, baseOf, baseWord, coverWord] of orientations) {
+          const lines = [];
+          bases.forEach((unit, index) => {
+            const positions = unit.filter(i => s.cand[i] & bit).map(coverOf);
+            if (positions.length >= 2 && positions.length <= size) lines.push({ index, positions });
+          });
+          for (const combo of combinations(lines, size)) {
+            const coverIndexes = new Set(combo.flatMap(l => l.positions));
+            if (coverIndexes.size !== size) continue;
+            const baseIndexes = combo.map(l => l.index);
+            const targets = [...coverIndexes].flatMap(c => covers[c])
+              .filter(i => !baseIndexes.includes(baseOf(i)));
+            if (eliminate(s, targets, bit)) {
+              const coverList = [...coverIndexes].sort().map(c => c + 1);
+              return {
+                name: `${size === 2 ? "X-Wing" : "Swordfish"} op de ${n}`,
+                text: `in ${baseWord} ${listText(baseIndexes.map(b => b + 1))} kan de ${n} alleen in ` +
+                  `${coverWord} ${listText(coverList)}. Welke plekken het ook worden, die ${coverWord} ` +
+                  `krijgen daar hun ${n}. Daarom kan de ${n} uit de rest van die ${coverWord} weg.`,
+                pattern: baseIndexes.flatMap(b => bases[b]).filter(i => s.cand[i] & bit),
+              };
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    // Pivot {a,b} sees wings {a,c} and {b,c}: c is gone from cells that see both wings
+    function xyWing(s) {
+      const pairs = [...Array(81).keys()].filter(i => bitCount(s.cand[i]) === 2);
+      for (const pivot of pairs) {
+        const [a, b] = digitsOf(s.cand[pivot]);
+        const wings = pairs.filter(w => isPeer(pivot, w));
+        for (const w1 of wings) {
+          if (!(s.cand[w1] & (1 << a)) || (s.cand[w1] & (1 << b))) continue;
+          const c = digitsOf(s.cand[w1] & ~(1 << a))[0];
+          const wantedW2 = (1 << b) | (1 << c);
+          for (const w2 of wings) {
+            if (s.cand[w2] !== wantedW2) continue;
+            const targets = PEERS[w1].filter(i => i !== w2 && isPeer(i, w2));
+            if (eliminate(s, targets, 1 << c)) {
+              return {
+                name: "XY-Wing",
+                text: `het middelste vakje is een ${a} of een ${b}. Is het een ${a}, dan wordt de ene vleugel ` +
+                  `een ${c}; is het een ${b}, dan de andere. Vakjes die beide vleugels zien, kunnen dus geen ${c} zijn.`,
+                pattern: [pivot, w1, w2],
+              };
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function candidateMasks(grid) {
+      return grid.map((v, i) => v ? 0 : candidates(grid, i).reduce((m, n) => m | (1 << n), 0));
+    }
+
+    // Applies the easiest technique that works, or returns null when none does
+    function nextStep(s) {
+      for (const technique of TECHNIQUES) {
+        const step = technique.apply(s);
+        if (step) return { ...step, tier: technique.tier };
+      }
+      return null;
+    }
+
+    function rate(puzzleGrid) {
+      const s = { grid: puzzleGrid.slice(), cand: candidateMasks(puzzleGrid) };
+      let tier = 0;
+      while (s.grid.includes(0)) {
+        const step = nextStep(s);
+        if (!step) return { tier: STUCK, empty: s.grid.filter(v => !v).length };
+        tier = Math.max(tier, step.tier);
+      }
+      return { tier, empty: 0 };
+    }
+
+    // Maps a rating to the 1-10 scale. Levels 7-10: the more empty cells
+    // left when the techniques run out, the harder the puzzle.
+    function levelOf({ tier, empty }, givens) {
+      if (tier <= 2) return givens > 34 ? 1 : givens > 30 ? 2 : 3;
+      if (tier === 3) return 4;
+      if (tier === 4) return 5;
+      if (tier < STUCK) return 6;
+      return empty < 30 ? 7 : empty < 38 ? 8 : empty < 46 ? 9 : 10;
     }
 
     // ---------- Game ----------
 
+    // Generating can take a second or more for some levels, so it runs in
+    // small chunks: one attempt per tick, keeping the page responsive.
+    function startJob(level) {
+      const job = { level, result: null, done: false, onDone: null, cancelled: false };
+      const startedAt = Date.now();
+      function step() {
+        if (job.cancelled) return;
+        const result = attempt(level);
+        if (!job.result || Math.abs(result.level - level) < Math.abs(job.result.level - level)) {
+          job.result = result;
+        }
+        if (job.result.level === level || Date.now() - startedAt > GENERATE_BUDGET) {
+          job.done = true;
+          if (job.onDone) job.onDone(job.result);
+        } else {
+          setTimeout(step, 20);
+        }
+      }
+      setTimeout(step, 20);
+      return job;
+    }
+
+    let nextJob = null;     // next puzzle, prepared in the background while you play
+    let waitingJob = null;  // puzzle we are waiting for right now
+    let nextGameTimer = null;
+    let solveTimer = null;  // runs while "Los op" is solving
+    let marks = { pattern: new Set(), target: new Set(), removed: {} }; // highlights of the last step
+
+    function chosenLevel() {
+      return Number(difficultyEl.value);
+    }
+
     function newGame() {
-      ({ puzzle, solution } = generate(GIVENS[difficultyEl.value]));
+      clearTimeout(nextGameTimer);
+      stopAutoSolve();
+      if (waitingJob) waitingJob.cancelled = true;
+
+      const level = chosenLevel();
+      let job = nextJob && nextJob.level === level ? nextJob : null;
+      if (nextJob && !job) nextJob.cancelled = true;
+      nextJob = null;
+      if (!job) job = startJob(level);
+
+      if (job.done) {
+        startGame(job.result);
+      } else {
+        waitingJob = job;
+        job.onDone = startGame;
+        locked = true;
+        selected = null;
+        overlayEl.innerHTML = `<strong>Sudoku maken…</strong><span>niveau ${level}</span>`;
+        overlayEl.classList.add("show");
+      }
+    }
+
+    function startGame(result) {
+      waitingJob = null;
+      ({ puzzle, solution } = result);
+      document.getElementById("level").textContent = result.level;
       values = puzzle.slice();
       notes = values.map(() => new Set());
       hinted = new Set();
@@ -281,7 +647,9 @@
       startTime = Date.now();
       overlayEl.classList.remove("show");
       messageEl.textContent = "";
+      clearMarks();
       render();
+      nextJob = startJob(chosenLevel());
     }
 
     function select(i) {
@@ -292,6 +660,8 @@
 
     function enter(n) {
       if (locked || selected === null || puzzle[selected]) return;
+      stopAutoSolve();
+      clearMarks();
       messageEl.textContent = "";
 
       if (notesMode && !values[selected]) {
@@ -309,6 +679,8 @@
 
     function erase() {
       if (locked || selected === null || puzzle[selected]) return;
+      stopAutoSolve();
+      clearMarks();
       values[selected] = 0;
       notes[selected].clear();
       hinted.delete(selected);
@@ -323,6 +695,8 @@
 
     function hint() {
       if (locked) return;
+      stopAutoSolve();
+      clearMarks();
       const wrong = [];
       const empty = [];
       for (let i = 0; i < 81; i++) {
@@ -359,9 +733,121 @@
       checkSolved();
     }
 
+    // ---------- Step & solve ----------
+
+    function clearMarks() {
+      marks = { pattern: new Set(), target: new Set(), removed: {} };
+    }
+
+    function stopAutoSolve() {
+      clearInterval(solveTimer);
+      solveTimer = null;
+      solveBtn.textContent = "▶ Los op";
+      solveBtn.classList.remove("on");
+    }
+
+    function toggleAutoSolve() {
+      if (solveTimer) return stopAutoSolve();
+      if (locked) return;
+      solveBtn.textContent = "⏸ Stop";
+      solveBtn.classList.add("on");
+      solverStep();
+      solveTimer = setInterval(solverStep, 700);
+    }
+
+    function manualStep() {
+      if (locked) return;
+      stopAutoSolve();
+      solverStep();
+    }
+
+    // One logical step, explained. Works on your notes, so you can follow
+    // which numbers are removed.
+    function solverStep() {
+      if (locked) return stopAutoSolve();
+      clearMarks();
+      const empty = [...Array(81).keys()].filter(i => !values[i]);
+
+      // A wrong number would make every deduction after it wrong, so fix that first
+      const wrong = values.findIndex((v, i) => v && v !== solution[i]);
+      if (wrong !== -1) {
+        values[wrong] = solution[wrong];
+        notes[wrong].clear();
+        clearNotesAround(wrong, solution[wrong]);
+        hinted.add(wrong);
+        return showStep(`Eerst een fout herstellen: hier hoort een ${solution[wrong]}.`, [wrong], true);
+      }
+
+      // The techniques work with notes, so every empty cell needs them
+      if (empty.some(i => notes[i].size === 0)) {
+        for (const i of empty) {
+          if (!notes[i].size) notes[i] = new Set(candidates(values, i));
+        }
+        return showStep("Eerst alle mogelijkheden als notities ingevuld. Druk nog eens op Stap.", [], false);
+      }
+
+      const crossedOut = empty.find(i => !notes[i].has(solution[i]));
+      if (crossedOut !== undefined) {
+        notes[crossedOut].add(solution[crossedOut]);
+        return showStep(`Hier was de ${solution[crossedOut]} weggestreept, maar die kan er wel. ` +
+          `Ik heb hem teruggezet.`, [crossedOut], true);
+      }
+
+      // Your notes, minus numbers that already appear in the same row, column or box
+      const possible = candidateMasks(values);
+      const s = {
+        grid: values.slice(),
+        cand: values.map((v, i) => [...notes[i]].reduce((m, n) => m | (1 << n), 0) & possible[i]),
+      };
+      const before = s.cand.slice();
+      let text;
+      const step = nextStep(s);
+      if (step) {
+        text = `${step.name}: ${step.text}`;
+        step.pattern.forEach(i => marks.pattern.add(i));
+      } else {
+        const i = empty.reduce((a, b) => bitCount(s.cand[b]) < bitCount(s.cand[a]) ? b : a);
+        place(s, i, solution[i]);
+        text = `Hier werken de technieken niet meer: je hebt ketens of uitproberen nodig. ` +
+          `Daarom vul ik deze ${solution[i]} in.`;
+      }
+
+      // Copy the result back to the board
+      const placed = empty.filter(i => s.grid[i]);
+      for (const i of empty) {
+        if (s.grid[i]) {
+          values[i] = s.grid[i];
+          hinted.add(i);
+        }
+        notes[i] = new Set(digitsOf(s.cand[i]));
+        if (!placed.length) {
+          const gone = digitsOf(before[i] & ~s.cand[i]);
+          if (gone.length) marks.removed[i] = gone;
+        }
+      }
+      const targets = placed.length ? placed : Object.keys(marks.removed).map(Number);
+      showStep(text, targets, true);
+    }
+
+    function showStep(text, targets, counts) {
+      targets.forEach(i => marks.target.add(i));
+      if (counts) hints++;
+      messageEl.textContent = text;
+      selected = null;
+      render();
+      checkSolved();
+    }
+
     function checkSolved() {
       if (!values.every((v, i) => v === solution[i])) return;
       locked = true;
+      if (solveTimer) {
+        // Solved by "Los op": keep the board visible and don't count it
+        stopAutoSolve();
+        messageEl.textContent = "Opgelost door de solver. Druk op Overslaan voor een nieuwe sudoku.";
+        render();
+        return;
+      }
       solvedCount++;
       localStorage.setItem("sudokuSolved", solvedCount);
       const tipText = hints === 0 ? "zonder tips! 🎉" : `met ${hints} ${hints === 1 ? "tip" : "tips"}`;
@@ -372,7 +858,7 @@
       overlayEl.classList.add("show");
       selected = null;
       render();
-      setTimeout(newGame, NEXT_PUZZLE_DELAY);
+      nextGameTimer = setTimeout(newGame, NEXT_PUZZLE_DELAY);
     }
 
     // ---------- Rendering ----------
@@ -394,6 +880,7 @@
     }
 
     function render() {
+      if (!values) return; // first puzzle is still being made
       const selectedValue = selected !== null ? values[selected] : 0;
 
       cells.forEach((cell, i) => {
@@ -407,12 +894,19 @@
         if (selected !== null && isPeer(i, selected)) cell.classList.add("peer");
         if (selectedValue && v === selectedValue) cell.classList.add("same");
         if (i === selected) cell.classList.add("selected");
+        if (marks.pattern.has(i)) cell.classList.add("pattern");
+        if (marks.target.has(i)) cell.classList.add("target");
 
+        const removed = marks.removed[i] || [];
         if (v) {
           cell.textContent = v;
-        } else if (notes[i].size) {
+        } else if (notes[i].size || removed.length) {
           let html = '<div class="notes">';
-          for (let n = 1; n <= 9; n++) html += `<span>${notes[i].has(n) ? n : ""}</span>`;
+          for (let n = 1; n <= 9; n++) {
+            if (notes[i].has(n)) html += `<span>${n}</span>`;
+            else if (removed.includes(n)) html += `<span class="gone">${n}</span>`;
+            else html += "<span></span>";
+          }
           cell.innerHTML = html + "</div>";
         } else {
           cell.textContent = "";
@@ -450,8 +944,15 @@
     notesBtn.addEventListener("click", () => { notesMode = !notesMode; render(); });
     document.getElementById("eraseBtn").addEventListener("click", erase);
     document.getElementById("hintBtn").addEventListener("click", hint);
+    document.getElementById("stepBtn").addEventListener("click", manualStep);
+    solveBtn.addEventListener("click", toggleAutoSolve);
     document.getElementById("skipBtn").addEventListener("click", newGame);
-    difficultyEl.addEventListener("change", () => { difficultyEl.blur(); newGame(); });
+    difficultyEl.value = localStorage.getItem("sudokuLevel") || "5";
+    difficultyEl.addEventListener("change", () => {
+      difficultyEl.blur();
+      localStorage.setItem("sudokuLevel", difficultyEl.value);
+      newGame();
+    });
 
     window.addEventListener("keydown", (e) => {
       if (e.key >= "1" && e.key <= "9") {
@@ -463,6 +964,8 @@
         render();
       } else if (e.key.toLowerCase() === "t") {
         hint();
+      } else if (e.key.toLowerCase() === "s") {
+        manualStep();
       } else if (e.key.startsWith("Arrow")) {
         e.preventDefault();
         const moves = { ArrowUp: -9, ArrowDown: 9, ArrowLeft: -1, ArrowRight: 1 };
