@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sudoku</title>
+  <style>
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #0b0b1a;
+      color: #fff;
+      font-family: system-ui, sans-serif;
+    }
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 20px 12px;
+      user-select: none;
+    }
+    h1 {
+      margin: 0;
+      font-size: 22px;
+    }
+    .bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .stat {
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    #board {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      width: min(92vw, 480px);
+      aspect-ratio: 1;
+      border: 3px solid #8a8ab8;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid #33335a;
+      border-bottom: 1px solid #33335a;
+      font-size: min(5.5vw, 28px);
+      color: #7fb8ff;
+      cursor: pointer;
+    }
+    .cell.br { border-right: 3px solid #8a8ab8; }
+    .cell.bb { border-bottom: 3px solid #8a8ab8; }
+    .cell.given { color: #fff; font-weight: 600; }
+    .cell.peer { background: rgba(255, 255, 255, 0.05); }
+    .cell.same { background: rgba(127, 184, 255, 0.18); }
+    .cell.selected { background: rgba(127, 184, 255, 0.35); }
+    .cell.wrong { color: #ff6b6b; }
+    .cell.hinted { color: #ffd166; }
+    .cell.flash { animation: flash 0.8s ease-out; }
+    @keyframes flash {
+      from { background: rgba(255, 209, 102, 0.6); }
+    }
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      width: 100%;
+      height: 100%;
+      font-size: min(2.2vw, 11px);
+      color: #9a9ac0;
+    }
+    .notes span {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: rgba(11, 11, 26, 0.85);
+      text-align: center;
+      font-size: 18px;
+    }
+    #overlay.show { display: flex; }
+    #overlay strong { font-size: 30px; }
+    #pad {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 6px;
+      width: min(92vw, 480px);
+    }
+    button, select {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:hover, select:hover { background: rgba(255, 255, 255, 0.2); }
+    button.on { background: #3a6ea5; }
+    #pad button { padding: 10px 0; font-size: 20px; }
+    #pad button.done { opacity: 0.3; }
+    #message {
+      min-height: 20px;
+      color: #ffd166;
+      font-size: 14px;
+      text-align: center;
+    }
+    .help {
+      color: #9a9ac0;
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.7;
+    }
+    kbd {
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Sudoku</h1>
+    <div class="bar">
+      <select id="difficulty">
+        <option value="makkelijk">Makkelijk</option>
+        <option value="gemiddeld" selected>Gemiddeld</option>
+        <option value="moeilijk">Moeilijk</option>
+      </select>
+      <span class="stat">⏱ <span id="time">0:00</span></span>
+      <span class="stat">Tips: <span id="hints">0</span></span>
+      <span class="stat">Opgelost: <span id="solved">0</span></span>
+    </div>
+
+    <div id="board">
+      <div id="overlay"></div>
+    </div>
+
+    <div id="pad"></div>
+
+    <div class="bar">
+      <button id="notesBtn">✏️ Notities</button>
+      <button id="eraseBtn">⌫ Wissen</button>
+      <button id="hintBtn">💡 Tip</button>
+      <button id="skipBtn">⏭ Overslaan</button>
+    </div>
+
+    <div id="message"></div>
+
+    <div class="help">
+      <kbd>1</kbd>–<kbd>9</kbd> invullen &nbsp; <kbd>⌫</kbd> wissen &nbsp;
+      <kbd>←↑→↓</kbd> verplaatsen<br>
+      <kbd>N</kbd> notities aan/uit &nbsp; <kbd>T</kbd> tip
+    </div>
+  </main>
+
+  <script>
+    const GIVENS = { makkelijk: 40, gemiddeld: 32, moeilijk: 26 };
+    const NEXT_PUZZLE_DELAY = 3000;
+
+    const boardEl = document.getElementById("board");
+    const overlayEl = document.getElementById("overlay");
+    const padEl = document.getElementById("pad");
+    const messageEl = document.getElementById("message");
+    const difficultyEl = document.getElementById("difficulty");
+    const notesBtn = document.getElementById("notesBtn");
+
+    let puzzle, solution, values, notes, hinted;
+    let selected = null;
+    let notesMode = false;
+    let locked = false;
+    let hints = 0;
+    let startTime = 0;
+    let solvedCount = Number(localStorage.getItem("sudokuSolved")) || 0;
+
+    // ---------- Generator ----------
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function row(i) { return Math.floor(i / 9); }
+    function col(i) { return i % 9; }
+    function box(i) { return Math.floor(row(i) / 3) * 3 + Math.floor(col(i) / 3); }
+
+    function isPeer(a, b) {
+      return a !== b && (row(a) === row(b) || col(a) === col(b) || box(a) === box(b));
+    }
+
+    function candidates(grid, i) {
+      const used = new Array(10).fill(false);
+      const r = row(i), c = col(i);
+      const br = r - r % 3, bc = c - c % 3;
+      for (let k = 0; k < 9; k++) {
+        used[grid[r * 9 + k]] = true;
+        used[grid[k * 9 + c]] = true;
+        used[grid[(br + Math.floor(k / 3)) * 9 + bc + k % 3]] = true;
+      }
+      const result = [];
+      for (let n = 1; n <= 9; n++) {
+        if (!used[n]) result.push(n);
+      }
+      return result;
+    }
+
+    // Counts solutions up to `limit`. Leaves the grid solved when it stops at the limit.
+    function solve(grid, limit, randomize) {
+      let best = -1;
+      let bestCandidates = null;
+      for (let i = 0; i < 81; i++) {
+        if (grid[i]) continue;
+        const c = candidates(grid, i);
+        if (c.length === 0) return 0;
+        if (!bestCandidates || c.length < bestCandidates.length) {
+          best = i;
+          bestCandidates = c;
+          if (c.length === 1) break;
+        }
+      }
+      if (best === -1) return 1;
+      if (randomize) shuffle(bestCandidates);
+
+      let count = 0;
+      for (const n of bestCandidates) {
+        grid[best] = n;
+        count += solve(grid, limit - count, randomize);
+        if (count >= limit) return count;
+      }
+      grid[best] = 0;
+      return count;
+    }
+
+    function generate(givens) {
+      const full = new Array(81).fill(0);
+      solve(full, 1, true);
+
+      // Remove numbers one by one, as long as the puzzle keeps exactly one solution
+      const grid = full.slice();
+      let filled = 81;
+      for (const i of shuffle([...Array(81).keys()])) {
+        if (filled <= givens) break;
+        const kept = grid[i];
+        grid[i] = 0;
+        if (solve(grid.slice(), 2, false) === 1) filled--;
+        else grid[i] = kept;
+      }
+      return { puzzle: grid, solution: full };
+    }
+
+    // ---------- Game ----------
+
+    function newGame() {
+      ({ puzzle, solution } = generate(GIVENS[difficultyEl.value]));
+      values = puzzle.slice();
+      notes = values.map(() => new Set());
+      hinted = new Set();
+      selected = null;
+      locked = false;
+      hints = 0;
+      startTime = Date.now();
+      overlayEl.classList.remove("show");
+      messageEl.textContent = "";
+      render();
+    }
+
+    function select(i) {
+      if (locked) return;
+      selected = i;
+      render();
+    }
+
+    function enter(n) {
+      if (locked || selected === null || puzzle[selected]) return;
+      messageEl.textContent = "";
+
+      if (notesMode && !values[selected]) {
+        const cellNotes = notes[selected];
+        cellNotes.has(n) ? cellNotes.delete(n) : cellNotes.add(n);
+      } else {
+        values[selected] = values[selected] === n ? 0 : n;
+        notes[selected].clear();
+        hinted.delete(selected);
+        if (values[selected] === solution[selected]) clearNotesAround(selected, n);
+      }
+      render();
+      checkSolved();
+    }
+
+    function erase() {
+      if (locked || selected === null || puzzle[selected]) return;
+      values[selected] = 0;
+      notes[selected].clear();
+      hinted.delete(selected);
+      render();
+    }
+
+    function clearNotesAround(i, n) {
+      for (let j = 0; j < 81; j++) {
+        if (isPeer(i, j)) notes[j].delete(n);
+      }
+    }
+
+    function hint() {
+      if (locked) return;
+      const wrong = [];
+      const empty = [];
+      for (let i = 0; i < 81; i++) {
+        if (values[i] && values[i] !== solution[i]) wrong.push(i);
+        if (!values[i]) empty.push(i);
+      }
+
+      let target;
+      if (wrong.length) {
+        // First point out a mistake, otherwise the rest can't be solved
+        target = wrong.includes(selected) ? selected : wrong[0];
+        messageEl.textContent = `Tip: hier stond een fout, het moet een ${solution[target]} zijn.`;
+      } else if (selected !== null && !values[selected]) {
+        target = selected;
+        messageEl.textContent = `Tip: hier hoort een ${solution[target]}.`;
+      } else {
+        // Pick the empty cell with the fewest options: the easiest next step
+        target = empty.reduce((a, b) =>
+          candidates(values, b).length < candidates(values, a).length ? b : a);
+        const onlyOption = candidates(values, target).length === 1;
+        messageEl.textContent = onlyOption
+          ? `Tip: in dit vakje past alleen een ${solution[target]}.`
+          : `Tip: hier hoort een ${solution[target]}.`;
+      }
+
+      values[target] = solution[target];
+      notes[target].clear();
+      clearNotesAround(target, solution[target]);
+      hinted.add(target);
+      hints++;
+      selected = target;
+      render();
+      flash(target);
+      checkSolved();
+    }
+
+    function checkSolved() {
+      if (!values.every((v, i) => v === solution[i])) return;
+      locked = true;
+      solvedCount++;
+      localStorage.setItem("sudokuSolved", solvedCount);
+      const tipText = hints === 0 ? "zonder tips! 🎉" : `met ${hints} ${hints === 1 ? "tip" : "tips"}`;
+      overlayEl.innerHTML =
+        `<strong>Opgelost!</strong>` +
+        `<span>in ${formatTime(Date.now() - startTime)} ${tipText}</span>` +
+        `<span style="color:#9a9ac0;font-size:14px">Nieuwe sudoku komt eraan…</span>`;
+      overlayEl.classList.add("show");
+      selected = null;
+      render();
+      setTimeout(newGame, NEXT_PUZZLE_DELAY);
+    }
+
+    // ---------- Rendering ----------
+
+    const cells = [];
+    for (let i = 0; i < 81; i++) {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      cell.addEventListener("click", () => select(i));
+      boardEl.insertBefore(cell, overlayEl);
+      cells.push(cell);
+    }
+
+    for (let n = 1; n <= 9; n++) {
+      const button = document.createElement("button");
+      button.textContent = n;
+      button.addEventListener("click", () => enter(n));
+      padEl.appendChild(button);
+    }
+
+    function render() {
+      const selectedValue = selected !== null ? values[selected] : 0;
+
+      cells.forEach((cell, i) => {
+        const v = values[i];
+        cell.className = "cell";
+        if (col(i) % 3 === 2 && col(i) !== 8) cell.classList.add("br");
+        if (row(i) % 3 === 2 && row(i) !== 8) cell.classList.add("bb");
+        if (puzzle[i]) cell.classList.add("given");
+        if (hinted.has(i)) cell.classList.add("hinted");
+        if (v && v !== solution[i]) cell.classList.add("wrong");
+        if (selected !== null && isPeer(i, selected)) cell.classList.add("peer");
+        if (selectedValue && v === selectedValue) cell.classList.add("same");
+        if (i === selected) cell.classList.add("selected");
+
+        if (v) {
+          cell.textContent = v;
+        } else if (notes[i].size) {
+          let html = '<div class="notes">';
+          for (let n = 1; n <= 9; n++) html += `<span>${notes[i].has(n) ? n : ""}</span>`;
+          cell.innerHTML = html + "</div>";
+        } else {
+          cell.textContent = "";
+        }
+      });
+
+      // Dim the numbers that are already placed correctly 9 times
+      [...padEl.children].forEach((button, k) => {
+        const placed = values.filter((v, i) => v === k + 1 && v === solution[i]).length;
+        button.classList.toggle("done", placed === 9);
+      });
+
+      document.getElementById("hints").textContent = hints;
+      document.getElementById("solved").textContent = solvedCount;
+      notesBtn.classList.toggle("on", notesMode);
+    }
+
+    function flash(i) {
+      cells[i].classList.remove("flash");
+      void cells[i].offsetWidth; // restart the animation
+      cells[i].classList.add("flash");
+    }
+
+    function formatTime(ms) {
+      const s = Math.floor(ms / 1000);
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    }
+
+    setInterval(() => {
+      if (!locked) document.getElementById("time").textContent = formatTime(Date.now() - startTime);
+    }, 250);
+
+    // ---------- Controls ----------
+
+    notesBtn.addEventListener("click", () => { notesMode = !notesMode; render(); });
+    document.getElementById("eraseBtn").addEventListener("click", erase);
+    document.getElementById("hintBtn").addEventListener("click", hint);
+    document.getElementById("skipBtn").addEventListener("click", newGame);
+    difficultyEl.addEventListener("change", () => { difficultyEl.blur(); newGame(); });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key >= "1" && e.key <= "9") {
+        enter(Number(e.key));
+      } else if (e.key === "Backspace" || e.key === "Delete" || e.key === "0") {
+        erase();
+      } else if (e.key.toLowerCase() === "n") {
+        notesMode = !notesMode;
+        render();
+      } else if (e.key.toLowerCase() === "t") {
+        hint();
+      } else if (e.key.startsWith("Arrow")) {
+        e.preventDefault();
+        const moves = { ArrowUp: -9, ArrowDown: 9, ArrowLeft: -1, ArrowRight: 1 };
+        if (selected === null) return select(0);
+        const next = selected + moves[e.key];
+        const sameRow = row(next) === row(selected);
+        if (next >= 0 && next < 81 && (Math.abs(moves[e.key]) === 9 || sameRow)) select(next);
+      }
+    });
+
+    newGame();
+  </script>
+</body>
+</html>
