@@ -56,6 +56,12 @@ picture is randomly on the left or the right.
 
 All artwork is drawn in code as SVG.
 
+## Specs
+
+What each page must do, and why it is built the way it is, lives in
+[`.openspec/`](.openspec/README.md): one spec per page plus architectural decision records.
+Change the spec first, then the code.
+
 ## Fonts and logos
 
 All pages use the [Lab271](https://github.com/Lab271) design system of Schuberg

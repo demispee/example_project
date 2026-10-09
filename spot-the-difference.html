@@ -1381,7 +1381,7 @@
       const remaining = active.filter(d => !found.has(d.id));
       marksLayers().forEach(layer => remaining.forEach(d =>
         addMark(layer, `<circle class="revealed" cx="${d.x}" cy="${d.y}" r="${d.r + 8}"/>`)));
-      messageEl.textContent = `Here are the last ${remaining.length}. Press Next for a new picture.`;
+      messageEl.textContent = `Here are the last ${remaining.length}. Press next for a new picture.`;
       updateStats();
     }
 
