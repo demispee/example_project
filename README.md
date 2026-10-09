@@ -1,2 +1,64 @@
 # example_project
 
+Three small browser games, each a single HTML file with no dependencies and no build step.
+
+| Page | What it is |
+|------|------------|
+| [`sudoku.html`](sudoku.html) | Sudoku with difficulty levels 1 to 10, notes, hints, and a solver that explains each step |
+| [`verschillen.html`](verschillen.html) | Spot the difference (Dutch: *zoek de verschillen*) with three hand-drawn SVG scenes |
+| [`index.html`](index.html) | Bouncing balls: click to add balls, toggle gravity |
+
+## Running it
+
+Download or clone the repository and open any of the HTML files in a browser. There is
+nothing to install and no internet connection is needed.
+
+```sh
+git clone https://github.com/demispee/example_project.git
+open example_project/sudoku.html
+```
+
+## Sudoku
+
+- **Puzzles are generated in the browser** and always have exactly one solution.
+- **Difficulty is measured, not guessed.** Each puzzle is solved the way a person would,
+  and its level is set by the hardest technique it needs:
+
+  | Level | What it takes |
+  |-------|---------------|
+  | 1 to 3 | Singles only, with 42, 34, or 30 given numbers |
+  | 4 | Pointing pairs or box-line reduction |
+  | 5 | Naked or hidden pairs |
+  | 6 | Triples, X-Wing, XY-Wing, or Swordfish |
+  | 7 to 10 | Those techniques run out; chains or trial and error are needed. The earlier they run out, the higher the level |
+
+- **Step** applies one logical step and explains it on the board. **Solve** keeps stepping
+  until the puzzle is done.
+- The next puzzle is generated in the background while you play.
+
+Keyboard: `1` to `9` fill in, `Backspace` erases, arrow keys move, `N` toggles notes,
+`T` gives a hint, `S` takes a step.
+
+## Spot the difference
+
+Each scene (champagne and diamonds, a peacock, a vanity table with perfume and pearls) has
+10 to 12 possible differences, and every round picks 7 of them at random. All artwork is
+drawn in code as SVG. The interface is in Dutch.
+
+## Fonts and logos
+
+The sudoku page uses the [Lab271](https://github.com/Lab271) design system of Schuberg
+Philis.
+
+- **Fonts:** TT Interphases is a licensed font and is **not** part of this repository. The
+  page loads it from a local `fonts/` folder if present (ignored by git) and otherwise falls
+  back to Avenir Next, Poppins, Inter, or the system sans serif.
+- **Logos:** the Lab271 and Schuberg Philis logos are trademarks of Schuberg Philis. They
+  are **not** covered by the license below and may not be reused outside this project.
+
+## License
+
+The code is licensed under the [Apache License 2.0](LICENSE). Copyright 2026 demispee.
+
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues
+as described in [SECURITY.md](SECURITY.md).
