@@ -58,11 +58,11 @@ All artwork is drawn in code as SVG.
 
 ## Fonts and logos
 
-The sudoku page uses the [Lab271](https://github.com/Lab271) design system of Schuberg
+All pages use the [Lab271](https://github.com/Lab271) design system of Schuberg
 Philis.
 
 - **Fonts:** TT Interphases is a licensed font and is **not** part of this repository. The
-  page loads it from a local `fonts/` folder if present (ignored by git) and otherwise falls
+  pages load it from a local `fonts/` folder if present (ignored by git) and otherwise fall
   back to Avenir Next, Poppins, Inter, or the system sans serif.
 - **Logos:** the Lab271 and Schuberg Philis logos are trademarks of Schuberg Philis. They
   are **not** covered by the license below and may not be reused outside this project.

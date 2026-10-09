@@ -65,6 +65,23 @@
     .slash .tq { width: 44px; border-radius: 8px; background: var(--c-tq); }
     .slash .or { width: 19px; border-radius: 4px; background: var(--c-orange); }
 
+    .back {
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      margin-bottom: 28px;
+      padding: 0 16px;
+      border: 1px solid var(--c-border);
+      border-radius: 999px;
+      color: var(--c-muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      transition: color var(--motion), border-color var(--motion);
+    }
+    .back:hover { color: var(--c-tq); border-color: var(--c-tq); }
+
     .eyebrow {
       font-family: var(--mono);
       font-size: 11px;
@@ -261,7 +278,7 @@
     .btn:hover { opacity: 0.82; }
     .btn.primary, .btn.on { background: var(--c-tq); color: var(--c-canvas); }
     button:active { transform: scale(0.98); }
-    button:focus-visible, select:focus-visible {
+    button:focus-visible, select:focus-visible, a:focus-visible {
       outline: 2px solid var(--c-tq);
       outline-offset: 2px;
     }
@@ -323,6 +340,7 @@
 <body>
   <div class="slash" aria-hidden="true"><span class="tq"></span><span class="or"></span></div>
   <main>
+    <a class="back" href="index.html">← back</a>
     <div class="eyebrow">LAB271 \ sudoku</div>
     <h1>Logic beats guessing</h1>
 

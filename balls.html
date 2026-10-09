@@ -1,48 +1,111 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bouncing Balls</title>
+  <title>Bouncing balls \ LAB271</title>
   <style>
+    /* Lab271 design system, dark theme. TT Interphases is licensed via Schuberg Philis
+       and loads from a local fonts/ folder that is not shared; elsewhere the fallbacks apply. */
+    @font-face { font-family: "TT Interphases"; src: local("TT Interphases"), url("fonts/TTInterphases-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+    @font-face { font-family: "TT Interphases"; src: local("TT Interphases Bold"), url("fonts/TTInterphases-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+    @font-face { font-family: "TT Interphases"; src: local("TT Interphases Black"), url("fonts/TTInterphases-Black.ttf") format("truetype"); font-weight: 900; font-display: swap; }
+    @font-face { font-family: "TT Interphases Mono"; src: local("TT Interphases Mono"), url("fonts/TTInterphasesMono-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+    @font-face { font-family: "TT Interphases Mono"; src: local("TT Interphases Mono Bold"), url("fonts/TTInterphasesMono-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+    :root {
+      --c-canvas: #020C17;
+      --c-canvas-2: #061323;
+      --c-panel: #082646;
+      --c-text: #FFFFFF;
+      --c-muted: #8AA0B8;
+      --c-border: #12263F;
+      --c-tq: #1EE8ED;
+      --c-orange: #FF8D33;
+      --sans: "TT Interphases", "Avenir Next", "Poppins", "Inter", sans-serif;
+      --mono: "TT Interphases Mono", "Courier New", monospace;
+      --motion: 200ms cubic-bezier(.2, 0, .2, 1);
+    }
+
     html, body {
       margin: 0;
       height: 100%;
       overflow: hidden;
-      background: #0b0b1a;
-      font-family: system-ui, sans-serif;
+      background: var(--c-canvas);
+      color: var(--c-text);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
     }
     canvas {
       display: block;
       cursor: crosshair;
     }
-    #help {
+    #panel {
       position: fixed;
-      top: 16px;
-      left: 16px;
-      padding: 10px 14px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-      font-size: 14px;
-      line-height: 1.6;
+      top: 20px;
+      left: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 18px 22px;
+      border: 1px solid var(--c-border);
+      border-radius: 20px 20px 20px 0;
+      background: color-mix(in srgb, var(--c-canvas-2) 88%, transparent);
       user-select: none;
     }
-    kbd {
-      padding: 1px 6px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.2);
+    .back {
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 16px;
+      border: 1px solid var(--c-border);
+      border-radius: 999px;
+      color: var(--c-muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-decoration: none;
+      transition: color var(--motion), border-color var(--motion);
     }
+    .back:hover { color: var(--c-tq); border-color: var(--c-tq); }
+    .back:focus-visible {
+      outline: 2px solid var(--c-tq);
+      outline-offset: 2px;
+    }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: var(--c-tq);
+    }
+    strong {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.09;
+    }
+    .help {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      line-height: 2;
+      color: var(--c-muted);
+    }
+    .bs { color: var(--c-tq); }
+    #panel.compact > :not(.back) { display: none; }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
-  <div id="help">
-    <strong>Bouncing Balls</strong> &middot; <span id="count"></span><br>
-    Click to add balls<br>
-    <kbd>G</kbd> gravity: <span id="gravity">on</span> &nbsp;
-    <kbd>C</kbd> clear &nbsp;
-    <kbd>H</kbd> hide help
+  <div id="panel">
+    <a class="back" href="index.html">← back</a>
+    <div class="eyebrow">LAB271 \ bouncing balls \ <span id="count"></span></div>
+    <strong>Click to add balls</strong>
+    <div class="help" id="help">
+      g <span class="bs">\</span> gravity <span id="gravity">on</span> &nbsp;
+      c <span class="bs">\</span> clear &nbsp;
+      h <span class="bs">\</span> hide panel
+    </div>
   </div>
 
   <script>
@@ -50,6 +113,13 @@
     const ctx = canvas.getContext("2d");
     const GRAVITY = 0.25;
     const BOUNCINESS = 0.9;
+    // Lab271 colors, each as [highlight, base]
+    const COLORS = [
+      ["#B5FAFB", "#1EE8ED"],
+      ["#FFD3AE", "#FF8D33"],
+      ["#FF8CC8", "#FF0089"],
+      ["#A9CBEA", "#347EC1"],
+    ];
 
     let balls = [];
     let gravityOn = true;
@@ -70,7 +140,7 @@
         vx: random(-6, 6),
         vy: random(-8, 2),
         radius: random(12, 34),
-        hue: random(0, 360),
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
       });
     }
 
@@ -78,7 +148,6 @@
       if (gravityOn) ball.vy += GRAVITY;
       ball.x += ball.vx;
       ball.y += ball.vy;
-      ball.hue = (ball.hue + 0.5) % 360;
 
       // Bounce off the edges of the window
       if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
@@ -126,13 +195,13 @@
         ball.x - ball.radius / 3, ball.y - ball.radius / 3, ball.radius / 6,
         ball.x, ball.y, ball.radius
       );
-      gradient.addColorStop(0, `hsl(${ball.hue}, 100%, 85%)`);
-      gradient.addColorStop(1, `hsl(${ball.hue}, 90%, 50%)`);
+      gradient.addColorStop(0, ball.color[0]);
+      gradient.addColorStop(1, ball.color[1]);
 
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
       ctx.fillStyle = gradient;
-      ctx.shadowColor = `hsl(${ball.hue}, 100%, 60%)`;
+      ctx.shadowColor = ball.color[1];
       ctx.shadowBlur = 20;
       ctx.fill();
     }
@@ -140,7 +209,7 @@
     function frame() {
       // A see-through background leaves short trails behind the balls
       ctx.shadowBlur = 0;
-      ctx.fillStyle = "rgba(11, 11, 26, 0.25)";
+      ctx.fillStyle = "rgba(2, 12, 23, 0.25)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       balls.forEach(moveBall);
@@ -167,8 +236,7 @@
       } else if (key === "c") {
         balls = [];
       } else if (key === "h") {
-        const help = document.getElementById("help");
-        help.style.display = help.style.display === "none" ? "" : "none";
+        document.getElementById("panel").classList.toggle("compact");
       }
     });
 
