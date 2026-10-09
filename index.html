@@ -3,181 +3,69 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bouncing Balls</title>
+  <title>Sudoku and more</title>
   <style>
     html, body {
       margin: 0;
-      height: 100%;
-      overflow: hidden;
+      min-height: 100%;
       background: #0b0b1a;
+      color: #fff;
       font-family: system-ui, sans-serif;
     }
-    canvas {
-      display: block;
-      cursor: crosshair;
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 20px;
     }
-    #help {
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      padding: 10px 14px;
-      border-radius: 10px;
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+    }
+    p {
+      margin: 0 0 32px;
+      color: #9a9ac0;
+    }
+    .games {
+      display: grid;
+      gap: 14px;
+    }
+    a.game {
+      display: block;
+      padding: 18px 20px;
+      border-radius: 12px;
       background: rgba(255, 255, 255, 0.08);
       color: #fff;
-      font-size: 14px;
-      line-height: 1.6;
-      user-select: none;
+      text-decoration: none;
+      transition: background-color 200ms;
     }
-    kbd {
-      padding: 1px 6px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.2);
+    a.game:hover { background: rgba(255, 255, 255, 0.14); }
+    a.game strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 18px;
     }
+    a.game span { color: #9a9ac0; font-size: 14px; }
   </style>
 </head>
 <body>
-  <canvas id="canvas"></canvas>
-  <div id="help">
-    <strong>Bouncing Balls</strong> &middot; <span id="count"></span><br>
-    Click to add balls<br>
-    <kbd>G</kbd> gravity: <span id="gravity">on</span> &nbsp;
-    <kbd>C</kbd> clear &nbsp;
-    <kbd>H</kbd> hide help
-  </div>
+  <main>
+    <h1>Sudoku and more</h1>
+    <p>Small games that run in your browser. Nothing to install.</p>
 
-  <script>
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-    const GRAVITY = 0.25;
-    const BOUNCINESS = 0.9;
-
-    let balls = [];
-    let gravityOn = true;
-
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-
-    function random(min, max) {
-      return Math.random() * (max - min) + min;
-    }
-
-    function addBall(x, y) {
-      balls.push({
-        x,
-        y,
-        vx: random(-6, 6),
-        vy: random(-8, 2),
-        radius: random(12, 34),
-        hue: random(0, 360),
-      });
-    }
-
-    function moveBall(ball) {
-      if (gravityOn) ball.vy += GRAVITY;
-      ball.x += ball.vx;
-      ball.y += ball.vy;
-      ball.hue = (ball.hue + 0.5) % 360;
-
-      // Bounce off the edges of the window
-      if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
-        ball.vx *= -BOUNCINESS;
-        ball.x = Math.min(Math.max(ball.x, ball.radius), canvas.width - ball.radius);
-      }
-      if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
-        ball.vy *= -BOUNCINESS;
-        ball.y = Math.min(Math.max(ball.y, ball.radius), canvas.height - ball.radius);
-      }
-    }
-
-    // Let two balls bounce off each other, with bigger balls being heavier
-    function collide(a, b) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const distance = Math.hypot(dx, dy);
-      const minDistance = a.radius + b.radius;
-      if (distance === 0 || distance >= minDistance) return;
-
-      const nx = dx / distance;
-      const ny = dy / distance;
-      const massA = a.radius ** 2;
-      const massB = b.radius ** 2;
-
-      // Push the balls apart so they don't overlap
-      const overlap = minDistance - distance;
-      a.x -= nx * overlap * (massB / (massA + massB));
-      a.y -= ny * overlap * (massB / (massA + massB));
-      b.x += nx * overlap * (massA / (massA + massB));
-      b.y += ny * overlap * (massA / (massA + massB));
-
-      // Exchange speed along the line between their centers
-      const speed = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
-      if (speed <= 0) return;
-      const impulse = (2 * speed) / (massA + massB);
-      a.vx -= impulse * massB * nx;
-      a.vy -= impulse * massB * ny;
-      b.vx += impulse * massA * nx;
-      b.vy += impulse * massA * ny;
-    }
-
-    function drawBall(ball) {
-      const gradient = ctx.createRadialGradient(
-        ball.x - ball.radius / 3, ball.y - ball.radius / 3, ball.radius / 6,
-        ball.x, ball.y, ball.radius
-      );
-      gradient.addColorStop(0, `hsl(${ball.hue}, 100%, 85%)`);
-      gradient.addColorStop(1, `hsl(${ball.hue}, 90%, 50%)`);
-
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-      ctx.fillStyle = gradient;
-      ctx.shadowColor = `hsl(${ball.hue}, 100%, 60%)`;
-      ctx.shadowBlur = 20;
-      ctx.fill();
-    }
-
-    function frame() {
-      // A see-through background leaves short trails behind the balls
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = "rgba(11, 11, 26, 0.25)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      balls.forEach(moveBall);
-      for (let i = 0; i < balls.length; i++) {
-        for (let j = i + 1; j < balls.length; j++) {
-          collide(balls[i], balls[j]);
-        }
-      }
-      balls.forEach(drawBall);
-
-      document.getElementById("count").textContent = `${balls.length} balls`;
-      requestAnimationFrame(frame);
-    }
-
-    canvas.addEventListener("click", (event) => {
-      for (let i = 0; i < 5; i++) addBall(event.clientX, event.clientY);
-    });
-
-    window.addEventListener("keydown", (event) => {
-      const key = event.key.toLowerCase();
-      if (key === "g") {
-        gravityOn = !gravityOn;
-        document.getElementById("gravity").textContent = gravityOn ? "on" : "off";
-      } else if (key === "c") {
-        balls = [];
-      } else if (key === "h") {
-        const help = document.getElementById("help");
-        help.style.display = help.style.display === "none" ? "" : "none";
-      }
-    });
-
-    window.addEventListener("resize", resize);
-    resize();
-    for (let i = 0; i < 20; i++) {
-      addBall(random(50, canvas.width - 50), random(50, canvas.height / 2));
-    }
-    frame();
-  </script>
+    <div class="games">
+      <a class="game" href="sudoku.html">
+        <strong>Sudoku</strong>
+        <span>Difficulty 1 to 10, hints, and a solver that explains every step</span>
+      </a>
+      <a class="game" href="verschillen.html">
+        <strong>Zoek de verschillen</strong>
+        <span>Spot the difference in three glamorous scenes (in Dutch)</span>
+      </a>
+      <a class="game" href="balls.html">
+        <strong>Bouncing balls</strong>
+        <span>Click to add balls and toggle gravity</span>
+      </a>
+    </div>
+  </main>
 </body>
 </html>

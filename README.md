@@ -1,21 +1,25 @@
-# example_project
+# sudoku-and-more
 
 Three small browser games, each a single HTML file with no dependencies and no build step.
+
+**Play online:** <https://demispee.github.io/sudoku-and-more/>
 
 | Page | What it is |
 |------|------------|
 | [`sudoku.html`](sudoku.html) | Sudoku with difficulty levels 1 to 10, notes, hints, and a solver that explains each step |
 | [`verschillen.html`](verschillen.html) | Spot the difference (Dutch: *zoek de verschillen*) with three hand-drawn SVG scenes |
-| [`index.html`](index.html) | Bouncing balls: click to add balls, toggle gravity |
+| [`balls.html`](balls.html) | Bouncing balls: click to add balls, toggle gravity |
+| [`index.html`](index.html) | Start page with links to the three games |
 
 ## Running it
 
-Download or clone the repository and open any of the HTML files in a browser. There is
-nothing to install and no internet connection is needed.
+Play online at <https://demispee.github.io/sudoku-and-more/>, or download or clone the
+repository and open any of the HTML files in a browser. There is nothing to install and no
+internet connection is needed.
 
 ```sh
-git clone https://github.com/demispee/example_project.git
-open example_project/sudoku.html
+git clone https://github.com/demispee/sudoku-and-more.git
+open sudoku-and-more/sudoku.html
 ```
 
 ## Sudoku
