@@ -7,7 +7,7 @@ Three small browser games, each a single HTML file with no dependencies and no b
 | Page | What it is |
 |------|------------|
 | [`sudoku.html`](sudoku.html) | Sudoku with difficulty levels 1 to 10, notes, hints, and a solver that explains each step |
-| [`verschillen.html`](verschillen.html) | Spot the difference (Dutch: *zoek de verschillen*) with three hand-drawn SVG scenes |
+| [`spot-the-difference.html`](spot-the-difference.html) | Spot the difference with five hand-drawn SVG scenes |
 | [`balls.html`](balls.html) | Bouncing balls: click to add balls, toggle gravity |
 | [`index.html`](index.html) | Start page with links to the three games |
 
@@ -45,9 +45,16 @@ Keyboard: `1` to `9` fill in, `Backspace` erases, arrow keys move, `N` toggles n
 
 ## Spot the difference
 
-Each scene (champagne and diamonds, a peacock, a vanity table with perfume and pearls) has
-10 to 12 possible differences, and every round picks 7 of them at random. All artwork is
-drawn in code as SVG. The interface is in Dutch.
+Five scenes (champagne and diamonds, a peacock, a vanity table with perfume and pearls, a
+crowned swan on a moonlit lake, and a cocktail bar with a disco ball), each with 10 to 12
+possible differences. Every round picks 5, 7, or 10 of them at random, and the changed
+picture is randomly on the left or the right.
+
+- **Misses and hints cost time** (5 and 10 seconds), so clicking around at random doesn't pay.
+- **Show solution** marks the differences you didn't find.
+- **Records** are kept per scene and number of differences, in your browser.
+
+All artwork is drawn in code as SVG.
 
 ## Fonts and logos
 
